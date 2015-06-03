@@ -142,9 +142,11 @@ filter_OpenCL_impl(const float *packed_input,
         ker.setArg(ai++, cl_weight);
 
         size_t local_size = 0;
-        local_size += sizeof(float) * ALIGN_UP(nOutputPlanes, VEC_WIDTH);
+        local_size += GPU_VEC_WIDTH * GPU_INPUT_BLOCK_SIZE * 9 * sizeof(float);
 
         ker.setArg(ai++, local_size, NULL);
+
+        //printf("local_size = %d\n",(int)local_size);
 
         cl::Event event;
 

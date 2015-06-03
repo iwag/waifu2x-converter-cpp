@@ -41,14 +41,14 @@ filter(__global const float * __restrict__ packed_input,
         in2p = inp;
     }
 
-    __local float *intermediate = local_mem;
-    local_mem += sizeof(float) * nOutputPlanes;
-
     unsigned int vec_width = min((int)VEC_WIDTH, (int)nOutputPlanes);
     unsigned int nOutputBlock = nOutputPlanes / vec_width;
-    int inputBlockSize = nInputPlanes;
-    unsigned int nInputBlock = (nInputPlanes+1U)/2U;
-    unsigned int nInputBlock = 2;
+    //int inputBlockSize = nInputPlanes/2;
+    //unsigned int nInputBlock = (nInputPlanes+1U)/2U;
+    //unsigned int nInputBlock = 2;
+
+    unsigned int inputBlockSize = 2U;
+    unsigned int nInputBlock = (nInputPlanes+(inputBlockSize-1))/inputBlockSize;
 
     /* local_size = 16KB - arguments = 14KB?
      *
@@ -61,9 +61,37 @@ filter(__global const float * __restrict__ packed_input,
      *
      */
 
+    __local float *weight_local = (__local float*)local_mem;
+    local_mem += vec_width * inputBlockSize * 9;
+
     for (int ibi=0; ibi<nInputBlock; ibi++) {
+        unsigned int ipBegin = ibi * inputBlockSize;
+        unsigned int ipEnd = min(ipBegin + inputBlockSize, nInputPlanes);
+
         for (int obi=0; obi<nOutputBlock; obi++) {
             __global float *out = packed_output + (yi*wsz)*nOutputPlanes;
+
+            __local float *weight_local_ptr = weight_local + lid;
+            __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
+
+            for (unsigned int ipIndex = ipBegin;
+                 ipIndex < ipEnd; ipIndex++)
+            {
+                weight_local_ptr[0*VEC_WIDTH] = w[0*vec_width];
+                weight_local_ptr[1*VEC_WIDTH] = w[1*vec_width];
+                weight_local_ptr[2*VEC_WIDTH] = w[2*vec_width];
+
+                weight_local_ptr[3*VEC_WIDTH] = w[3*vec_width];
+                weight_local_ptr[4*VEC_WIDTH] = w[4*vec_width];
+                weight_local_ptr[5*VEC_WIDTH] = w[5*vec_width];
+
+                weight_local_ptr[6*VEC_WIDTH] = w[6*vec_width];
+                weight_local_ptr[7*VEC_WIDTH] = w[7*vec_width];
+                weight_local_ptr[8*VEC_WIDTH] = w[8*vec_width];
+
+                w += nOutputPlanes;
+                weight_local_ptr += 9*VEC_WIDTH;
+            }
 
             for (int xi=0; xi<wsz; xi+=2) {
                 float intermediate0 = 0;
@@ -73,14 +101,11 @@ filter(__global const float * __restrict__ packed_input,
                 __global float *in11 = (__global float*)in1p;
                 __global float *in21 = (__global float*)in2p;
 
-                in01 += xi * nInputPlanes;
-                in11 += xi * nInputPlanes;
-                in21 += xi * nInputPlanes;
+                in01 += xi * nInputPlanes + ipBegin;
+                in11 += xi * nInputPlanes + ipBegin;
+                in21 += xi * nInputPlanes + ipBegin;
 
-                __global float *w = weight + lid + obi*vec_width*9;
-
-                unsigned int ipBegin = ibi * inputBlockSize;
-                unsigned int ipEnd = min(ipBegin + inputBlockSize, nInputPlanes);
+                __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
 
                 for (unsigned int ipIndex = ipBegin;
                      ipIndex < ipEnd; ipIndex++)
@@ -172,12 +197,11 @@ filter(__global const float * __restrict__ packed_input,
                     mtz = max(v, 0.0f);
                     ltz = min(v, 0.0f);
                     v = ltz * 0.1f + mtz;
-
                     out[opIndex] = v;
                     out += nOutputPlanes;
 
-                    v = intermediate1;
 
+                    v = intermediate1;
                     if (nInputBlock != 1) {
                         v += out[opIndex];
                     }
@@ -185,9 +209,9 @@ filter(__global const float * __restrict__ packed_input,
                     mtz = max(v, 0.0f);
                     ltz = min(v, 0.0f);
                     v = ltz * 0.1f + mtz;
-
                     out[opIndex] = v;
                     out += nOutputPlanes;
+
                 } else if (ibi == 0) {
                     out[opIndex] = intermediate0;
                     out += nOutputPlanes;
