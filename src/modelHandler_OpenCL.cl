@@ -48,21 +48,26 @@ filter(__global const float * __restrict__ packed_input,
     unsigned int nOutputBlock = nOutputPlanes / vec_width;
 
     for (int obi=0; obi<nOutputBlock; obi++) {
-        __global float *in01 = (__global float*)in0p;
-        __global float *in11 = (__global float*)in1p;
-        __global float *in21 = (__global float*)in2p;
         __global float *out = packed_output + (yi*wsz)*nOutputPlanes;
 
         for (int xi=0; xi<wsz; xi+=2) {
             float intermediate0 = 0;
             float intermediate1 = 0;
 
+            __global float *in01 = (__global float*)in0p;
+            __global float *in11 = (__global float*)in1p;
+            __global float *in21 = (__global float*)in2p;
+
+            in01 += xi * nInputPlanes;
+            in11 += xi * nInputPlanes;
+            in21 += xi * nInputPlanes;
+
             __global float *w = weight + lid + obi*vec_width*9;
 
             for (int ipIndex = 0; ipIndex < nInputPlanes; ipIndex++) {
                 float i00, i01, i02, i03;
-                float i10, i11, i12, i04;
-                float i20, i21, i22, i05;
+                float i10, i11, i12, i13;
+                float i20, i21, i22, i23;
 
                 i01 = in01[0];
                 i11 = in11[0];
@@ -95,7 +100,7 @@ filter(__global const float * __restrict__ packed_input,
                 in11 ++;
                 in21 ++;
 
-                float v0 = 0, v1;
+                float v0 = 0, v1 = 0;
 
                 v0 += w[0*vec_width] * i00;
                 v1 += w[0*vec_width] * i01;

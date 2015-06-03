@@ -298,6 +298,7 @@ bool Model::filter(float *packed_input,
 
 	if (size.width&1) {
 		avx_available = false;
+		gpu_available = false;
 	}
 
 	if (gpu_available) {
