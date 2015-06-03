@@ -46,8 +46,9 @@ filter(__global const float * __restrict__ packed_input,
 
     unsigned int vec_width = min((int)VEC_WIDTH, (int)nOutputPlanes);
     unsigned int nOutputBlock = nOutputPlanes / vec_width;
-    int inputBlockSize = 4;
-    unsigned int nInputBlock = (nInputPlanes+3U)/4U;
+    int inputBlockSize = nInputPlanes;
+    //unsigned int nInputBlock = (nInputPlanes+3U)/4U;
+    unsigned int nInputBlock = 1;
 
     /* local_size = 16KB - arguments = 14KB?
      *
@@ -160,10 +161,13 @@ filter(__global const float * __restrict__ packed_input,
 
                 if (ibi == nInputBlock-1) {
                     float bv = biases[opIndex];
-
                     float v, mtz, ltz;
 
-                    v = intermediate0 + out[opIndex];
+                    v = intermediate0;
+
+                    if (nInputBlock != 1) {
+                        v += out[opIndex];
+                    }
                     v += bv;
                     mtz = max(v, 0.0f);
                     ltz = min(v, 0.0f);
@@ -172,7 +176,11 @@ filter(__global const float * __restrict__ packed_input,
                     out[opIndex] = v;
                     out += nOutputPlanes;
 
-                    v = intermediate1 + out[opIndex];
+                    v = intermediate1;
+
+                    if (nInputBlock != 1) {
+                        v += out[opIndex];
+                    }
                     v += bv;
                     mtz = max(v, 0.0f);
                     ltz = min(v, 0.0f);
