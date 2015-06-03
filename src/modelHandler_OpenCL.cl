@@ -47,8 +47,8 @@ filter(__global const float * __restrict__ packed_input,
     unsigned int vec_width = min((int)VEC_WIDTH, (int)nOutputPlanes);
     unsigned int nOutputBlock = nOutputPlanes / vec_width;
     int inputBlockSize = nInputPlanes;
-    //unsigned int nInputBlock = (nInputPlanes+3U)/4U;
-    unsigned int nInputBlock = 1;
+    unsigned int nInputBlock = (nInputPlanes+1U)/2U;
+    unsigned int nInputBlock = 2;
 
     /* local_size = 16KB - arguments = 14KB?
      *
