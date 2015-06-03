@@ -61,8 +61,11 @@ filter(__global const float * __restrict__ packed_input,
      *
      */
 
-    __local float *weight_local = (__local float*)local_mem;
-    local_mem += VEC_WIDTH * inputBlockSize * 9;
+    //__local float *weight_local = (__local float*)local_mem;
+    //local_mem += VEC_WIDTH * inputBlockSize * 9;
+
+    unsigned int x_block_size = 16U;
+    unsigned int x_block_count = (wsz+(x_block_size-1))/x_block_size;
 
     for (int ibi=0; ibi<nInputBlock; ibi++) {
         unsigned int ipBegin = ibi * inputBlockSize;
@@ -71,12 +74,12 @@ filter(__global const float * __restrict__ packed_input,
         for (int obi=0; obi<nOutputBlock; obi++) {
             __global float *out = packed_output + (yi*wsz)*nOutputPlanes;
 
+#if 0
             __local float *weight_local_ptr = weight_local + lid;
             __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
 
-            for (unsigned int ipIndex = ipBegin;
-                 ipIndex < ipEnd; ipIndex++)
-            {
+            int nip = ipEnd - ipBegin;
+            for (unsigned int ipIndex = 0; ipIndex<nip; ipIndex++) {
                 weight_local_ptr[0*VEC_WIDTH] = w[0*vec_width];
                 weight_local_ptr[1*VEC_WIDTH] = w[1*vec_width];
                 weight_local_ptr[2*VEC_WIDTH] = w[2*vec_width];
@@ -92,6 +95,7 @@ filter(__global const float * __restrict__ packed_input,
                 w += 9 * nOutputPlanes;
                 weight_local_ptr += 9*VEC_WIDTH;
             }
+#endif
 
             for (int xi=0; xi<wsz; xi+=2) {
                 float intermediate0 = 0;
@@ -105,7 +109,7 @@ filter(__global const float * __restrict__ packed_input,
                 in11 += xi * nInputPlanes + ipBegin;
                 in21 += xi * nInputPlanes + ipBegin;
 
-                //__local float *w = weight_local_ptr + lid;
+                //__local float *w = weight_local + lid;
                 __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
 
                 for (unsigned int ipIndex = ipBegin;

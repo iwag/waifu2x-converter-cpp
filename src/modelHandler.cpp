@@ -282,7 +282,11 @@ bool Model::filter(float *packed_input,
 		gpu_available = false;
 	}
 
-	if (nOutputPlanes == 1) {
+	if (nInputPlanes % GPU_INPUT_BLOCK_SIZE) {
+		gpu_available = false;
+	}
+
+	if (nInputPlanes == 1 || nOutputPlanes == 1) {
 		gpu_available = false;
 	}
 
