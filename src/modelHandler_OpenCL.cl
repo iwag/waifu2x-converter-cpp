@@ -47,7 +47,7 @@ filter(__global const float * __restrict__ packed_input,
     //unsigned int nInputBlock = (nInputPlanes+1U)/2U;
     //unsigned int nInputBlock = 2;
 
-    unsigned int inputBlockSize = 2U;
+    unsigned int inputBlockSize = 4U;
     unsigned int nInputBlock = (nInputPlanes+(inputBlockSize-1))/inputBlockSize;
 
     /* local_size = 16KB - arguments = 14KB?
@@ -62,7 +62,7 @@ filter(__global const float * __restrict__ packed_input,
      */
 
     __local float *weight_local = (__local float*)local_mem;
-    local_mem += vec_width * inputBlockSize * 9;
+    local_mem += VEC_WIDTH * inputBlockSize * 9;
 
     for (int ibi=0; ibi<nInputBlock; ibi++) {
         unsigned int ipBegin = ibi * inputBlockSize;
@@ -89,7 +89,7 @@ filter(__global const float * __restrict__ packed_input,
                 weight_local_ptr[7*VEC_WIDTH] = w[7*vec_width];
                 weight_local_ptr[8*VEC_WIDTH] = w[8*vec_width];
 
-                w += nOutputPlanes;
+                w += 9 * nOutputPlanes;
                 weight_local_ptr += 9*VEC_WIDTH;
             }
 
@@ -105,6 +105,7 @@ filter(__global const float * __restrict__ packed_input,
                 in11 += xi * nInputPlanes + ipBegin;
                 in21 += xi * nInputPlanes + ipBegin;
 
+                //__local float *w = weight_local_ptr + lid;
                 __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
 
                 for (unsigned int ipIndex = ipBegin;
@@ -146,37 +147,39 @@ filter(__global const float * __restrict__ packed_input,
                     in21 ++;
 
                     float v0 = 0, v1 = 0;
+                    int vw = vec_width;
 
-                    v0 += w[0*vec_width] * i00;
-                    v1 += w[0*vec_width] * i01;
+                    v0 += w[0*vw] * i00;
+                    v1 += w[0*vw] * i01;
 
-                    v0 += w[1*vec_width] * i01;
-                    v1 += w[1*vec_width] * i02;
+                    v0 += w[1*vw] * i01;
+                    v1 += w[1*vw] * i02;
 
-                    v0 += w[2*vec_width] * i02;
-                    v1 += w[2*vec_width] * i03;
-
-
-                    v0 += w[3*vec_width] * i10;
-                    v1 += w[3*vec_width] * i11;
-
-                    v0 += w[4*vec_width] * i11;
-                    v1 += w[4*vec_width] * i12;
-
-                    v0 += w[5*vec_width] * i12;
-                    v1 += w[5*vec_width] * i13;
+                    v0 += w[2*vw] * i02;
+                    v1 += w[2*vw] * i03;
 
 
-                    v0 += w[6*vec_width] * i20;
-                    v1 += w[6*vec_width] * i21;
+                    v0 += w[3*vw] * i10;
+                    v1 += w[3*vw] * i11;
 
-                    v0 += w[7*vec_width] * i21;
-                    v1 += w[7*vec_width] * i22;
+                    v0 += w[4*vw] * i11;
+                    v1 += w[4*vw] * i12;
 
-                    v0 += w[8*vec_width] * i22;
-                    v1 += w[8*vec_width] * i23;
+                    v0 += w[5*vw] * i12;
+                    v1 += w[5*vw] * i13;
 
-                    w += nOutputPlanes*9;
+
+                    v0 += w[6*vw] * i20;
+                    v1 += w[6*vw] * i21;
+
+                    v0 += w[7*vw] * i21;
+                    v1 += w[7*vw] * i22;
+
+                    v0 += w[8*vw] * i22;
+                    v1 += w[8*vw] * i23;
+
+                    //w += 9*vw;
+                    w += 9*nOutputPlanes;
 
                     intermediate0 += v0;
                     intermediate1 += v1;

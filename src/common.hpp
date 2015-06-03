@@ -9,8 +9,8 @@
 
 #define VEC_WIDTH 8U
 #define UNROLL 2U
-#define GPU_VEC_WIDTH 32
-#define GPU_INPUT_BLOCK_SIZE 2
+#define GPU_VEC_WIDTH 64
+#define GPU_INPUT_BLOCK_SIZE 4
 
 #define ALIGN_UP(v,a) (((v+(a-1))/(a))*(a))
 
