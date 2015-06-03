@@ -1,14 +1,5 @@
 /* -*- mode: c -*- */
 
-float
-get_data(__global const float *p, int hsz, int wsz, int step, int yi, int xi, int num_plane, int plane)
-{
-    xi = min(wsz-1, xi);
-    xi = max(0, xi);
-
-    return p[xi * num_plane];
-}
-
 __kernel void
 filter(__global const float * __restrict__ packed_input,
        unsigned int nInputPlanes,
@@ -47,8 +38,10 @@ filter(__global const float * __restrict__ packed_input,
     //unsigned int nInputBlock = (nInputPlanes+1U)/2U;
     //unsigned int nInputBlock = 2;
 
-    unsigned int inputBlockSize = 4U;
-    unsigned int nInputBlock = (nInputPlanes+(inputBlockSize-1))/inputBlockSize;
+    //unsigned int inputBlockSize = 4U;
+    //unsigned int nInputBlock = (nInputPlanes+(inputBlockSize-1))/inputBlockSize;
+    unsigned int inputBlockSize = nInputPlanes;
+    unsigned int nInputBlock = 1;
 
     /* local_size = 16KB - arguments = 14KB?
      *
@@ -64,10 +57,19 @@ filter(__global const float * __restrict__ packed_input,
     //__local float *weight_local = (__local float*)local_mem;
     //local_mem += VEC_WIDTH * inputBlockSize * 9;
 
+    __local float *input_buffer0 = (__local float*)local_mem;
+    local_mem += nInputPlanes * 4;
+    __local float *input_buffer1 = (__local float*)local_mem;
+    local_mem += nInputPlanes * 4;
+    __local float *input_buffer2 = (__local float*)local_mem;
+    local_mem += nInputPlanes * 4;
+
     unsigned int x_block_size = 16U;
     unsigned int x_block_count = (wsz+(x_block_size-1))/x_block_size;
 
-    for (int ibi=0; ibi<nInputBlock; ibi++) {
+    //for (int ibi=0; ibi<nInputBlock; ibi++)
+    {
+        unsigned int ibi = 0;
         unsigned int ipBegin = ibi * inputBlockSize;
         unsigned int ipEnd = min(ipBegin + inputBlockSize, nInputPlanes);
 
@@ -109,8 +111,49 @@ filter(__global const float * __restrict__ packed_input,
                 in11 += xi * nInputPlanes + ipBegin;
                 in21 += xi * nInputPlanes + ipBegin;
 
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+                for (unsigned int ipIndex = lid;
+                     ipIndex < nInputPlanes;
+                     ipIndex+=vec_width)
+                {
+                    float v01 = input_buffer0[ipIndex + nInputPlanes] = in01[ipIndex];
+                    float v11 = input_buffer1[ipIndex + nInputPlanes] = in11[ipIndex];
+                    float v21 = input_buffer2[ipIndex + nInputPlanes] = in21[ipIndex];
+                    float v02 = input_buffer0[ipIndex + nInputPlanes*2] = in01[ipIndex + nInputPlanes*1];
+                    float v12 = input_buffer1[ipIndex + nInputPlanes*2] = in11[ipIndex + nInputPlanes*1];
+                    float v22 = input_buffer2[ipIndex + nInputPlanes*2] = in21[ipIndex + nInputPlanes*1];
+
+                    if (xi == 0) {
+                        input_buffer0[ipIndex] = v01;
+                        input_buffer1[ipIndex] = v11;
+                        input_buffer2[ipIndex] = v21;
+                    } else {
+                        input_buffer0[ipIndex] = in01[ipIndex - nInputPlanes];
+                        input_buffer1[ipIndex] = in11[ipIndex - nInputPlanes];
+                        input_buffer2[ipIndex] = in21[ipIndex - nInputPlanes];
+                    }
+
+                    if (xi+1 == wsz-1) {
+                        input_buffer0[ipIndex + nInputPlanes*3] = v02;
+                        input_buffer1[ipIndex + nInputPlanes*3] = v12;
+                        input_buffer2[ipIndex + nInputPlanes*3] = v22;
+                    } else {
+                        input_buffer0[ipIndex + nInputPlanes*3] = in01[ipIndex + nInputPlanes*2];
+                        input_buffer1[ipIndex + nInputPlanes*3] = in11[ipIndex + nInputPlanes*2];
+                        input_buffer2[ipIndex + nInputPlanes*3] = in21[ipIndex + nInputPlanes*2];
+                    }
+                }
+
+                barrier(CLK_LOCAL_MEM_FENCE);
+
+
                 //__local float *w = weight_local + lid;
                 __global float *w = weight + lid + (ipBegin*nOutputPlanes + obi*vec_width)*9;
+
+                __local float *lin01 = input_buffer0 + nInputPlanes;
+                __local float *lin11 = input_buffer1 + nInputPlanes;
+                __local float *lin21 = input_buffer2 + nInputPlanes;
 
                 for (unsigned int ipIndex = ipBegin;
                      ipIndex < ipEnd; ipIndex++)
@@ -119,21 +162,21 @@ filter(__global const float * __restrict__ packed_input,
                     float i10, i11, i12, i13;
                     float i20, i21, i22, i23;
 
-                    i01 = in01[0];
-                    i11 = in11[0];
-                    i21 = in21[0];
-                    i02 = in01[+nInputPlanes];
-                    i12 = in11[+nInputPlanes];
-                    i22 = in21[+nInputPlanes];
+                    i01 = lin01[0];
+                    i11 = lin11[0];
+                    i21 = lin21[0];
+                    i02 = lin01[+nInputPlanes];
+                    i12 = lin11[+nInputPlanes];
+                    i22 = lin21[+nInputPlanes];
 
                     if (xi == 0) {
                         i00 = i01;
                         i10 = i11;
                         i20 = i21;
                     } else {
-                        i00 = in01[-nInputPlanes];
-                        i10 = in11[-nInputPlanes];
-                        i20 = in21[-nInputPlanes];
+                        i00 = lin01[-nInputPlanes];
+                        i10 = lin11[-nInputPlanes];
+                        i20 = lin21[-nInputPlanes];
                     }
 
                     if (xi+1 == wsz-1) {
@@ -141,14 +184,14 @@ filter(__global const float * __restrict__ packed_input,
                         i13 = i12;
                         i23 = i22;
                     } else {
-                        i03 = in01[+nInputPlanes*2];
-                        i13 = in11[+nInputPlanes*2];
-                        i23 = in21[+nInputPlanes*2];
+                        i03 = lin01[+nInputPlanes*2];
+                        i13 = lin11[+nInputPlanes*2];
+                        i23 = lin21[+nInputPlanes*2];
                     }
 
-                    in01 ++;
-                    in11 ++;
-                    in21 ++;
+                    lin01++;
+                    lin11++;
+                    lin21++;
 
                     float v0 = 0, v1 = 0;
                     int vw = vec_width;
