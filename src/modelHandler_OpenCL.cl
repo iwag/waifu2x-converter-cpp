@@ -53,18 +53,23 @@ filter(__global const float * __restrict__ packed_input,
         __global float *in21 = (__global float*)in2p;
         __global float *out = packed_output + (yi*wsz)*nOutputPlanes;
 
-        for (int xi=0; xi<wsz; xi++) {
-            float intermediate = 0;
+        for (int xi=0; xi<wsz; xi+=2) {
+            float intermediate0 = 0;
+            float intermediate1 = 0;
+
             __global float *w = weight + lid + obi*vec_width*9;
 
             for (int ipIndex = 0; ipIndex < nInputPlanes; ipIndex++) {
-                float i00, i01, i02;
-                float i10, i11, i12;
-                float i20, i21, i22;
+                float i00, i01, i02, i03;
+                float i10, i11, i12, i04;
+                float i20, i21, i22, i05;
 
                 i01 = in01[0];
                 i11 = in11[0];
                 i21 = in21[0];
+                i02 = in01[+nInputPlanes];
+                i12 = in11[+nInputPlanes];
+                i22 = in21[+nInputPlanes];
 
                 if (xi == 0) {
                     i00 = i01;
@@ -76,52 +81,86 @@ filter(__global const float * __restrict__ packed_input,
                     i20 = in21[-nInputPlanes];
                 }
 
-                if (xi == wsz-1) {
-                    i02 = i01;
-                    i12 = i11;
-                    i22 = i21;
+                if (xi+1 == wsz-1) {
+                    i03 = i02;
+                    i13 = i12;
+                    i23 = i22;
                 } else {
-                    i02 = in01[+nInputPlanes];
-                    i12 = in11[+nInputPlanes];
-                    i22 = in21[+nInputPlanes];
+                    i03 = in01[+nInputPlanes*2];
+                    i13 = in11[+nInputPlanes*2];
+                    i23 = in21[+nInputPlanes*2];
                 }
 
                 in01 ++;
                 in11 ++;
                 in21 ++;
 
-                float v = 0;
+                float v0 = 0, v1;
 
-                v += w[0*vec_width] * i00;
-                v += w[1*vec_width] * i01;
-                v += w[2*vec_width] * i02;
+                v0 += w[0*vec_width] * i00;
+                v1 += w[0*vec_width] * i01;
 
-                v += w[3*vec_width] * i10;
-                v += w[4*vec_width] * i11;
-                v += w[5*vec_width] * i12;
+                v0 += w[1*vec_width] * i01;
+                v1 += w[1*vec_width] * i02;
 
-                v += w[6*vec_width] * i20;
-                v += w[7*vec_width] * i21;
-                v += w[8*vec_width] * i22;
+                v0 += w[2*vec_width] * i02;
+                v1 += w[2*vec_width] * i03;
+
+
+                v0 += w[3*vec_width] * i10;
+                v1 += w[3*vec_width] * i11;
+
+                v0 += w[4*vec_width] * i11;
+                v1 += w[4*vec_width] * i12;
+
+                v0 += w[5*vec_width] * i12;
+                v1 += w[5*vec_width] * i13;
+
+
+                v0 += w[6*vec_width] * i20;
+                v1 += w[6*vec_width] * i21;
+
+                v0 += w[7*vec_width] * i21;
+                v1 += w[7*vec_width] * i22;
+
+                v0 += w[8*vec_width] * i22;
+                v1 += w[8*vec_width] * i23;
 
                 w += nOutputPlanes*9;
 
-                intermediate += v;
+                intermediate0 += v0;
+                intermediate1 += v1;
             }
 
             int opIndex = obi*vec_width + lid;
 
             float bv = biases[opIndex];
-            float v = intermediate;
-            v += bv;
 
-            float mtz = max(v, 0.0f);
-            float ltz = min(v, 0.0f);
+            {
+                float v = intermediate0;
+                v += bv;
 
-            v = ltz * 0.1f + mtz;
+                float mtz = max(v, 0.0f);
+                float ltz = min(v, 0.0f);
 
-            out[opIndex] = v;
-            out += nOutputPlanes;
+                v = ltz * 0.1f + mtz;
+
+                out[opIndex] = v;
+                out += nOutputPlanes;
+            }
+
+            {
+                float v = intermediate1;
+                v += bv;
+
+                float mtz = max(v, 0.0f);
+                float ltz = min(v, 0.0f);
+
+                v = ltz * 0.1f + mtz;
+
+                out[opIndex] = v;
+                out += nOutputPlanes;
+            }
         }
     }
 }
