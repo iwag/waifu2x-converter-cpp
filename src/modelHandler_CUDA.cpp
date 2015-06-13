@@ -191,7 +191,7 @@ filter_CUDA_impl(ComputeEnv *env,
 
 	r = cuLaunchKernel(dev->filter,
 			   h, 1, 1,
-			   nOutputPlanes, 1, 1,
+			   nOutputPlanes/2, 1, 1,
 			   sizeof(float) * nInputPlanes * (GPU_BLOCK_SIZE+2) * 3,
 			   dev->stream, args, NULL);
 	if (r != CUDA_SUCCESS) {

@@ -215,13 +215,13 @@ filter(const float * __restrict__ packed_input,
 	float *in_block1 = in_block1_base + nInputPlanes;
 	float *in_block2 = in_block2_base + nInputPlanes;
 	int lid = threadIdx.x;
-	float bv = biases[lid];
+	float bv0 = biases[lid*2+0];
+	float bv1 = biases[lid*2+1];
 
 	for (int xi0=0; xi0<wsz; xi0+=BLOCK_SIZE) {
-
 		/*for (unsigned int op=0; op<nOutputPlanes; op++) thread */
 		{
-			int op = lid;
+			int op = lid*2;
 			int rem = wsz - xi0;
 			__syncthreads();
 			if (lid < nInputPlanes/2) {
@@ -267,20 +267,30 @@ filter(const float * __restrict__ packed_input,
 			}
 			__syncthreads();
 
-			if (rem >= BLOCK_SIZE) {
+			if (0 && rem >= BLOCK_SIZE) {
+#if 0
+
 #define DECL_PTR(y,x)		float *p##y##x = &in_block##y[nInputPlanes * (x-1)];
 
 				UNROLL10x3(DECL_PTR);
 
-				float sum0 = 0;
-				float sum1 = 0;
-				float sum2 = 0;
-				float sum3 = 0;
+				float sum00 = 0;
+				float sum01 = 0;
+				float sum02 = 0;
+				float sum03 = 0;
+				float sum04 = 0;
+				float sum05 = 0;
+				float sum06 = 0;
+				float sum07 = 0;
 
-				float sum4 = 0;
-				float sum5 = 0;
-				float sum6 = 0;
-				float sum7 = 0;
+				float sum10 = 0;
+				float sum11 = 0;
+				float sum12 = 0;
+				float sum13 = 0;
+				float sum14 = 0;
+				float sum15 = 0;
+				float sum16 = 0;
+				float sum17 = 0;
 
 				{
 					const float *w0 = weight + lid;
@@ -290,7 +300,9 @@ filter(const float * __restrict__ packed_input,
 
 						UNROLL10x3(LOAD_INPUT2);
 
-#define LOAD_COEF(X)				float w_##X = w[X * 128];
+#define LOAD_COEF(X)							\
+						float w0_##X = w[X * 128]; \
+						float w1_##X = w[X * 128];
 
 #define CALC(IDX,Y,I0,I1,I2,I3,I4,I5,I6,I7)				\
 						sum0 += w_##IDX * i##Y##I0; \
@@ -372,6 +384,7 @@ filter(const float * __restrict__ packed_input,
 
 					UNROLL8(RELU);
 				}
+#endif
 			} else {
 				for (int bi=0; bi<BLOCK_SIZE; bi++) {
 					int xi = xi0+bi;
@@ -379,8 +392,10 @@ filter(const float * __restrict__ packed_input,
 						break;
 					}
 
-					const float *w0 = weight + lid;
-					float sum = 0;
+					const float *w0 = weight + lid*2;
+
+					float sum0 = 0;
+					float sum1 = 0;
 
 					for (int ip=0; ip<nInputPlanes; ip++) {
 						float i00, i01, i02;
@@ -400,29 +415,65 @@ filter(const float * __restrict__ packed_input,
 						i22 = in_block2[(bi+1)*nInputPlanes+ip];
 
 						const float *w = w0;
-						sum += w[(9*ip+0) * 128]*i00;
-						sum += w[(9*ip+1) * 128]*i01;
-						sum += w[(9*ip+2) * 128]*i02;
 
-						sum += w[(9*ip+3) * 128]*i10;
-						sum += w[(9*ip+4) * 128]*i11;
-						sum += w[(9*ip+5) * 128]*i12;
+						float2 w0 = *(float2*)&w[(9*ip+0) * 128];
+						float2 w1 = *(float2*)&w[(9*ip+1) * 128];
+						float2 w2 = *(float2*)&w[(9*ip+2) * 128];
+						float2 w3 = *(float2*)&w[(9*ip+3) * 128];
+						float2 w4 = *(float2*)&w[(9*ip+4) * 128];
+						float2 w5 = *(float2*)&w[(9*ip+5) * 128];
+						float2 w6 = *(float2*)&w[(9*ip+6) * 128];
+						float2 w7 = *(float2*)&w[(9*ip+7) * 128];
+						float2 w8 = *(float2*)&w[(9*ip+8) * 128];
 
-						sum += w[(9*ip+6) * 128]*i20;
-						sum += w[(9*ip+7) * 128]*i21;
-						sum += w[(9*ip+8) * 128]*i22;
+						sum0 += w0.x*i00;
+						sum0 += w1.x*i01;
+						sum0 += w2.x*i02;
+
+						sum0 += w3.x*i10;
+						sum0 += w4.x*i11;
+						sum0 += w5.x*i12;
+
+						sum0 += w6.x*i20;
+						sum0 += w7.x*i21;
+						sum0 += w8.x*i22;
+
+
+						sum1 += w0.y*i00;
+						sum1 += w1.y*i01;
+						sum1 += w2.y*i02;
+
+						sum1 += w3.y*i10;
+						sum1 += w4.y*i11;
+						sum1 += w5.y*i12;
+
+						sum1 += w6.y*i20;
+						sum1 += w7.y*i21;
+						sum1 += w8.y*i22;
 					}
 
 					float *out = packed_output + (yi*wsz + xi)*nOutputPlanes;
+
 					{
-						float v = sum;
-						v += bv;
+						float v = sum0;
+						v += bv0;
 
 						float mtz = max(v, 0.0f);
 						float ltz = min(v, 0.0f);
 
 						v = ltz * 0.1f + mtz;
 						out[op] = v;
+					}
+
+					{
+						float v = sum1;
+						v += bv1;
+
+						float mtz = max(v, 0.0f);
+						float ltz = min(v, 0.0f);
+
+						v = ltz * 0.1f + mtz;
+						out[op+1] = v;
 					}
 				}
 			}
